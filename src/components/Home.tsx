@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
     Button,
     Center,
     Heading,
-    Text,
     Input,
     ScaleFade,
     Divider,
@@ -15,40 +14,38 @@ import {
     Select,
     useToast,
     HStack,
+    Text,
     FormControl,
     FormLabel,
-    useDisclosure,
-    Modal,
-    ModalOverlay,
-    ModalContent,
-    ModalHeader,
-    ModalBody,
-    ModalCloseButton,
-    ModalFooter,
+    OrderedList,
+    ListItem,
 } from "@chakra-ui/react";
 import { Card } from '@components/design/Card';
 import { searchSchoolDistricts, searchSchools, NCESDistrictFeatureAttributes, NCESSchoolFeatureAttributes } from "@utils/nces";
 
+const PAGE_SIZE = 20;
+
 const Home: React.FC = () => {
     const [searching, setSearching] = useState(false);
     const [districtSearch, setDistrictSearch] = useState<NCESDistrictFeatureAttributes[]>([]);
+    const [filteredDistricts, setFilteredDistricts] = useState<NCESDistrictFeatureAttributes[]>([]);
     const [schoolSearch, setSchoolSearch] = useState<NCESSchoolFeatureAttributes[]>([]);
     const [districtQuery, setDistrictQuery] = useState("");
     const [schoolQuery, setSchoolQuery] = useState("");
     const [selectedDistrict, setSelectedDistrict] = useState<NCESDistrictFeatureAttributes | null>(null);
     const [selectedSchool, setSelectedSchool] = useState<NCESSchoolFeatureAttributes | null>(null);
-    const [filteredDistricts, setFilteredDistricts] = useState<NCESDistrictFeatureAttributes[]>([]);
-    const [filteredSchools, setFilteredSchools] = useState<NCESSchoolFeatureAttributes[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(0);
     const toast = useToast();
-    const { isOpen, onOpen, onClose } = useDisclosure();
 
     // Function to search districts
-    const handleDistrictSearch = useCallback(async () => {
+    const handleDistrictSearch = async () => {
         setSearching(true);
         try {
             const results = await searchSchoolDistricts(districtQuery);
             setDistrictSearch(results);
-            setFilteredDistricts(results);
+            setTotalPages(Math.ceil(results.length / PAGE_SIZE));
+            setFilteredDistricts(results.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
         } catch (error) {
             toast({
                 title: "Error",
@@ -59,15 +56,21 @@ const Home: React.FC = () => {
             });
         }
         setSearching(false);
-    }, [districtQuery, toast]);
+    };
+
+    // Effect to handle pagination
+    useEffect(() => {
+        if (districtSearch.length > 0) {
+            setFilteredDistricts(districtSearch.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
+        }
+    }, [currentPage, districtSearch]);
 
     // Function to search schools
-    const handleSchoolSearch = useCallback(async () => {
+    const handleSchoolSearch = async () => {
         setSearching(true);
         try {
             const results = await searchSchools(schoolQuery, selectedDistrict?.LEAID || "");
             setSchoolSearch(results);
-            setFilteredSchools(results);
         } catch (error) {
             toast({
                 title: "Error",
@@ -78,34 +81,14 @@ const Home: React.FC = () => {
             });
         }
         setSearching(false);
-    }, [schoolQuery, selectedDistrict, toast]);
+    };
 
     // Effect to search schools when a district is selected
     useEffect(() => {
         if (selectedDistrict) {
             handleSchoolSearch();
         }
-    }, [selectedDistrict, handleSchoolSearch]);
-
-    // Filter districts based on query
-    useEffect(() => {
-        if (districtSearch.length > 0) {
-            const filtered = districtSearch.filter(district =>
-                district.NAME.toLowerCase().includes(districtQuery.toLowerCase())
-            );
-            setFilteredDistricts(filtered);
-        }
-    }, [districtQuery, districtSearch]);
-
-    // Filter schools based on query
-    useEffect(() => {
-        if (schoolSearch.length > 0) {
-            const filtered = schoolSearch.filter(school =>
-                school.NAME?.toLowerCase().includes(schoolQuery.toLowerCase())
-            );
-            setFilteredSchools(filtered);
-        }
-    }, [schoolQuery, schoolSearch]);
+    }, [selectedDistrict]);
 
     return (
         <Center padding="100px" height="90vh">
@@ -165,52 +148,60 @@ const Home: React.FC = () => {
 
                     <Divider margin={4} />
 
+                    {/* Pagination */}
+                    {districtSearch.length > PAGE_SIZE && (
+                        <HStack spacing={4} justify="center">
+                            <Button
+                                disabled={currentPage <= 1}
+                                onClick={() => setCurrentPage(currentPage - 1)}
+                            >
+                                Previous
+                            </Button>
+                            <Text>{`Page ${currentPage} of ${totalPages}`}</Text>
+                            <Button
+                                disabled={currentPage >= totalPages}
+                                onClick={() => setCurrentPage(currentPage + 1)}
+                            >
+                                Next
+                            </Button>
+                        </HStack>
+                    )}
+
                     {/* Affichage des résultats */}
                     {searching ? <Spinner /> : (
                         <VStack spacing={4} align="start">
                             <Heading size="md">Districts</Heading>
-                            <VStack spacing={4} align="start">
+                            <OrderedList>
                                 {filteredDistricts.map(district => (
-                                    <Box
+                                    <ListItem
                                         key={district.LEAID}
-                                        onClick={() => {
-                                            setSelectedDistrict(district);
-                                            setSelectedSchool(null); // Reset school selection
-                                        }}
+                                        onClick={() => setSelectedDistrict(district)}
                                         cursor="pointer"
-                                        _hover={{ bg: "gray.100" }}
-                                        p={2}
-                                        borderWidth={1}
-                                        borderRadius="md"
                                     >
                                         {district.NAME}
-                                    </Box>
+                                    </ListItem>
                                 ))}
-                            </VStack>
+                            </OrderedList>
 
                             {selectedDistrict && (
                                 <>
                                     <Heading size="md">Schools</Heading>
-                                    <FormControl>
-                                        <FormLabel>Select a school</FormLabel>
-                                        <Select
-                                            placeholder="Select a school"
-                                            onChange={(e) => {
-                                                const school = filteredSchools.find(s => s.LEAID === e.target.value);
-                                                setSelectedSchool(school || null);
-                                            }}
-                                        >
-                                            {filteredSchools.map(school => (
-                                                <option key={school.LEAID} value={school.LEAID}>
-                                                    {school.NAME}
-                                                </option>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
+                                    <OrderedList>
+                                        {schoolSearch.map(school => (
+                                            <ListItem
+                                                key={school.NCESSCH}
+                                                onClick={() => setSelectedSchool(school)}
+                                                cursor="pointer"
+                                            >
+                                                {school.NAME}
+                                            </ListItem>
+                                        ))}
+                                    </OrderedList>
                                     {selectedSchool && (
-                                        <Box mt={4} p={4} borderWidth={1} borderRadius="md">
-                                            <Heading size="sm">{selectedSchool.NAME}</Heading>
-                                            <Text>Details about the selected school will be shown here.</Text>
+                                        <Box borderWidth={1} borderRadius="md" p={4}>
+                                            <Heading size="sm">School Details</Heading>
+                                            <Text><strong>Name:</strong> {selectedSchool.NAME}</Text>
+                                            <Text><strong>Address:</strong> {selectedSchool.STREET}, {selectedSchool.CITY}, {selectedSchool.STATE} {selectedSchool.ZIP}</Text>
                                         </Box>
                                     )}
                                 </>
