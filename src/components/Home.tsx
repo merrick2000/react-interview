@@ -24,6 +24,8 @@ const Home: React.FC = () => {
     const [searching, setSearching] = React.useState(false)
     const [districtSearch, setDistrictSearch] = React.useState<NCESDistrictFeatureAttributes[]>([]);
     const [schoolSearch, setSchoolSearch] = React.useState<NCESSchoolFeatureAttributes[]>([]);
+    const [districtQuery, setDistrictQuery] = React.useState("");
+    const [schoolQuery, setSchoolQuery] = React.useState("");
     
     const demo = async () => { // see console for api result examples
         setSearching(true)
@@ -36,6 +38,19 @@ const Home: React.FC = () => {
         console.log("School Example", demoSchoolSearch)
         setSearching(false)
     }
+    const handleDistrictSearch = async () => {
+        setSearching(true);
+        const results = await searchSchoolDistricts(districtQuery);
+        setDistrictSearch(results);
+        setSearching(false);
+    };
+    
+    const handleSchoolSearch = async () => {
+        setSearching(true);
+        const results = await searchSchools(schoolQuery, districtSearch[0]?.LEAID);
+        setSchoolSearch(results);
+        setSearching(false);
+    };
 
     useEffect(() => {
         demo()
@@ -46,26 +61,65 @@ const Home: React.FC = () => {
             <ScaleFade initialScale={0.9} in={true}>
                 <Card variant="rounded" borderColor="blue">
                     <Heading>School Data Finder</Heading>
-                    <Text>
-                        How would you utilize React.useEffect with the searchSchoolDistricts and searchSchools functions? <br />
-                        Using <a href="https://chakra-ui.com/docs/principles" target="_blank">Chakra-UI</a> or your favorite UI toolkit, build an interface that allows the user to: <br />
-                        <OrderedList>
-                            <ListItem>Search for a district</ListItem>
-                            <ListItem>Search for a school within the district (or bypass district filter)</ListItem>
-                            <ListItem>View all returned data in an organized way</ListItem>
-                        </OrderedList>
-                    </Text>
+                    
+                    {/* Recherche des districts */}
+                    <VStack spacing={4}>
+                        <InputGroup>
+                            <Input
+                                placeholder="Search for a district"
+                                value={districtQuery}
+                                onChange={(e) => setDistrictQuery(e.target.value)}
+                            />
+                            <InputRightAddon>
+                                <Button onClick={handleDistrictSearch}>Search District</Button>
+                            </InputRightAddon>
+                        </InputGroup>
+                        
+                        {/* Recherche des écoles */}
+                        <InputGroup>
+                            <Input
+                                placeholder="Search for a school"
+                                value={schoolQuery}
+                                onChange={(e) => setSchoolQuery(e.target.value)}
+                                isDisabled={!districtSearch.length} // Désactiver si aucune recherche de district n'est effectuée
+                            />
+                            <InputRightAddon>
+                                <Button onClick={handleSchoolSearch}>Search School</Button>
+                            </InputRightAddon>
+                        </InputGroup>
+                    </VStack>
+    
                     <Divider margin={4} />
+                    
+                    {/* Affichage des résultats */}
                     <Text>
-                        Check the console for example of returned data. <b>Happy coding!</b>< br />
-                        {searching ? <Spinner /> : <></>}< br />
-                        {districtSearch.length} Demo Districts<br />
-                        {schoolSearch.length} Demo Schools<br />
+                        {searching ? <Spinner /> : <></>}
+                        <br />
+                        {districtSearch.length} Districts found<br />
+                        {schoolSearch.length} Schools found<br />
                     </Text>
+                    
+                    {/* Affichage des résultats */}
+                    <VStack spacing={4} align="start">
+                        <Heading size="md">Districts</Heading>
+                        <OrderedList>
+                            {districtSearch.map(district => (
+                                <ListItem key={district.LEAID}>{district.NAME}</ListItem>
+                            ))}
+                        </OrderedList>
+    
+                        <Heading size="md">Schools</Heading>
+                        <OrderedList>
+                            {schoolSearch.map(school => (
+                                <ListItem key={school.SCHOOLID}>{school.NAME}</ListItem>
+                            ))}
+                        </OrderedList>
+                    </VStack>
                 </Card>
             </ScaleFade>
         </Center>
     );
+    
 };
 
 export default Home
