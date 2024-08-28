@@ -1,1 +1,1 @@
-export const googleMapsKey = "AIzaSyA6ybJwxJZgd0t91Xx_QEr_4FU5hph0ifM"
+export const googleMapsKey = process.env.GOOGLE_MAPS_KEY

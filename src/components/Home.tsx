@@ -90,7 +90,8 @@ const Home: React.FC = () => {
     }, [selectedDistrict]);
 
     return (
-        <Flex
+        <VStack>
+            <Flex
             direction="column"
             align="center"
             justify="center"
@@ -99,7 +100,7 @@ const Home: React.FC = () => {
             bg="gray.50"
         >
             <ScaleFade initialScale={0.9} in={true}>
-                <Card variant="rounded" borderColor="blue" p={6} maxWidth="800px" width="100%">
+                <Card variant="rounded" borderColor="blue">
                     <Heading mb={6}>School Data Finder</Heading>
 
                     {/* Search Districts */}
@@ -236,6 +237,7 @@ const Home: React.FC = () => {
                 </Card>
             </ScaleFade>
         </Flex>
+        </VStack>
     );
 };
 
