@@ -1,1 +1,1 @@
-export const googleMapsKey = process.env.GOOGLE_MAPS_KEY
+export const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_KEY

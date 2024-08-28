@@ -1,25 +1,29 @@
 import React, { useState, useEffect } from "react";
 import {
-    Button,
-    Center,
-    Heading,
-    Text,
-    Input,
-    ScaleFade,
-    Divider,
-    Spinner,
-    VStack,
-    InputGroup,
-    InputRightAddon,
     Box,
-    Select,
     Flex,
+    Input,
+    VStack,
+    Select,
+    Button,
+    Text,
+    Spinner,
+    Heading,
+    Divider,
     useToast,
 } from "@chakra-ui/react";
-import { Card } from '@components/design/Card';
-import { searchSchoolDistricts, searchSchools, NCESDistrictFeatureAttributes, NCESSchoolFeatureAttributes } from "@utils/nces";
+import { Card } from "@components/design/Card";
+import {
+    searchSchoolDistricts,
+    searchSchools,
+    NCESDistrictFeatureAttributes,
+    NCESSchoolFeatureAttributes,
+} from "@utils/nces";
+import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
+import schoolIcon from '../school.svg';
 
-const PAGE_SIZE = 20;
+// Replace with your Google Maps API key from .env
+const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 
 const Home: React.FC = () => {
     const [searching, setSearching] = useState(false);
@@ -30,19 +34,20 @@ const Home: React.FC = () => {
     const [schoolQuery, setSchoolQuery] = useState("");
     const [selectedDistrict, setSelectedDistrict] = useState<NCESDistrictFeatureAttributes | null>(null);
     const [selectedSchool, setSelectedSchool] = useState<NCESSchoolFeatureAttributes | null>(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(0);
+    const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+    const [selectedMarker, setSelectedMarker] = useState<NCESSchoolFeatureAttributes | null>(null);
     const toast = useToast();
 
-    // Function to search districts
+    const { isLoaded } = useJsApiLoader({
+        googleMapsApiKey: googleMapsKey || '',
+    });
+
     const handleDistrictSearch = async () => {
         setSearching(true);
         try {
             const results = await searchSchoolDistricts(districtQuery);
             setDistrictSearch(results);
-            setTotalPages(Math.ceil(results.length / PAGE_SIZE));
-            setFilteredDistricts(results.slice(0, PAGE_SIZE));
-            setCurrentPage(1); // Reset to first page after new search
+            setFilteredDistricts(results);
         } catch (error) {
             toast({
                 title: "Error",
@@ -55,10 +60,19 @@ const Home: React.FC = () => {
         setSearching(false);
     };
 
-    // Function to search schools within the selected district
+    useEffect(() => {
+        if (selectedDistrict) {
+            handleSchoolSearch();
+            // Update map center to the selected district's location
+            setMapCenter({
+                lat: selectedDistrict.LAT1516,
+                lng: selectedDistrict.LON1516,
+            });
+        }
+    }, [selectedDistrict]);
+
     const handleSchoolSearch = async () => {
         if (!selectedDistrict) return;
-
         setSearching(true);
         try {
             const results = await searchSchools(schoolQuery, selectedDistrict.LEAID);
@@ -75,169 +89,122 @@ const Home: React.FC = () => {
         setSearching(false);
     };
 
-    // Update filtered districts when district search results or page changes
-    useEffect(() => {
-        if (districtSearch.length > 0) {
-            setFilteredDistricts(districtSearch.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
-        }
-    }, [currentPage, districtSearch]);
-
-    // Effect to automatically search for schools when a district is selected
-    useEffect(() => {
-        if (selectedDistrict) {
-            handleSchoolSearch();
-        }
-    }, [selectedDistrict]);
-
     return (
-        <VStack>
-            <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            height="100vh"
-            padding={4}
-            bg="gray.50"
-        >
-            <ScaleFade initialScale={0.9} in={true}>
-                <Card variant="rounded" borderColor="blue">
-                    <Heading mb={6}>School Data Finder</Heading>
+        <Flex direction="column" p={8} height="100vh" gap={4}>
+            <Heading>School Data Finder</Heading>
+            <Divider />
 
-                    {/* Search Districts */}
-                    <VStack spacing={4} mb={6} width="100%">
-                        <InputGroup>
-                            <Input
-                                placeholder="Search for a district"
-                                value={districtQuery}
-                                onChange={(e) => setDistrictQuery(e.target.value)}
+            <Flex direction={{ base: "column", md: "row" }} gap={4} flex="1">
+                {/* Colonne 1: Recherche et Sélection de District */}
+                <VStack flex="1" spacing={4}>
+                    <Input
+                        placeholder="Search for a district"
+                        value={districtQuery}
+                        onChange={(e) => setDistrictQuery(e.target.value)}
+                    />
+                    <Button onClick={handleDistrictSearch} isLoading={searching}>
+                        Search District
+                    </Button>
+
+                    <Select
+                        placeholder="Select a district"
+                        onChange={(e) => {
+                            const district = filteredDistricts.find(d => d.LEAID === e.target.value);
+                            setSelectedDistrict(district || null);
+                            setSelectedSchool(null);
+                        }}
+                    >
+                        {filteredDistricts.map(district => (
+                            <option key={district.LEAID} value={district.LEAID}>
+                                {district.NAME}
+                            </option>
+                        ))}
+                    </Select>
+                </VStack>
+
+                {/* Colonne 2: Recherche et Sélection d'École */}
+                <VStack flex="1" spacing={4} visibility={selectedDistrict ? "visible" : "hidden"}>
+                    <Input
+                        placeholder="Search for a school"
+                        value={schoolQuery}
+                        onChange={(e) => setSchoolQuery(e.target.value)}
+                        disabled={!selectedDistrict}
+                    />
+                    <Button onClick={handleSchoolSearch} isLoading={searching}>
+                        Search School
+                    </Button>
+
+                    <Select
+                        placeholder="Select a school"
+                        onChange={(e) => {
+                            const school = schoolSearch.find(s => s?.NCESSCH === e.target.value);
+                            setSelectedSchool(school || null);
+                        }}
+                        disabled={!selectedDistrict}
+                    >
+                        {schoolSearch.map(school => (
+                            <option key={school?.NCESSCH} value={school?.NCESSCH}>
+                                {school?.NAME}
+                            </option>
+                        ))}
+                    </Select>
+                </VStack>
+
+                {/* Colonne 3: Détails de l'École */}
+                <Box flex="1" borderWidth={1} borderRadius="md" p={4} visibility={selectedSchool ? "visible" : "hidden"}>
+                    {selectedSchool ? (
+                        <>
+                            <Heading size="md">{selectedSchool?.NAME}</Heading>
+                            <Text>Street: {selectedSchool?.STREET}</Text>
+                            <Text>City: {selectedSchool?.CITY}</Text>
+                            <Text>State: {selectedSchool?.STATE}</Text>
+                            <Text>ZIP: {selectedSchool?.ZIP}</Text>
+                            {/* Ajouter d'autres détails pertinents */}
+                        </>
+                    ) : (
+                        <Text>Select a school to view details</Text>
+                    )}
+                </Box>
+            </Flex>
+
+            {/* Carte Google Maps */}
+            {isLoaded && mapCenter && (
+                <Box flex="1" borderWidth={1} borderRadius="md" p={4}>
+                    <GoogleMap
+                        mapContainerStyle={{ height: "400px", width: "100%" }}
+                        center={mapCenter}
+                        zoom={12}
+                    >
+                        {schoolSearch.map(school => (
+                            <Marker
+                                key={school?.NCESSCH}
+                                position={{ lat: school?.LAT || 0, lng: school?.LON || 0 }}
+                                icon={schoolIcon}  // Custom icon
+                                onClick={() => setSelectedMarker(school)}
                             />
-                            <InputRightAddon>
-                                <Button onClick={handleDistrictSearch}>Search District</Button>
-                            </InputRightAddon>
-                        </InputGroup>
-                    </VStack>
-
-                    {/* Filtered Districts List */}
-                    {filteredDistricts.length > 0 && (
-                        <VStack spacing={4} mb={6} width="100%">
-                            <Select
-                                placeholder="Select a district"
-                                onChange={(e) => {
-                                    const selectedLEAID = e.target.value;
-                                    const district = districtSearch.find(d => d.LEAID === selectedLEAID);
-                                    setSelectedDistrict(district || null);
-                                    setSelectedSchool(null); // Reset school selection
-                                    setSchoolSearch([]); // Reset school results
-                                    setSchoolQuery("");  // Reset school query
+                        ))}
+                        {selectedMarker && (
+                            <InfoWindow
+                                position={{
+                                    lat: selectedMarker?.LAT || 0,
+                                    lng: selectedMarker?.LON || 0,
                                 }}
+                                onCloseClick={() => setSelectedMarker(null)}
                             >
-                                {filteredDistricts.map(district => (
-                                    <option key={district.LEAID} value={district.LEAID}>
-                                        {district.NAME}
-                                    </option>
-                                ))}
-                            </Select>
-
-                            {selectedDistrict && (
-                                <InputGroup>
-                                    <Input
-                                        placeholder="Search for a school"
-                                        value={schoolQuery}
-                                        onChange={(e) => setSchoolQuery(e.target.value)}
-                                    />
-                                    <InputRightAddon>
-                                        <Button onClick={handleSchoolSearch}>Search School</Button>
-                                    </InputRightAddon>
-                                </InputGroup>
-                            )}
-                        </VStack>
-                    )}
-
-                    <Divider margin={4} />
-
-                    {/* Display Results */}
-                    {searching ? <Spinner /> : (
-                        <VStack spacing={4} align="start" width="100%">
-                            <Heading size="md">Districts</Heading>
-                            <VStack spacing={2} align="start" width="100%">
-                                {filteredDistricts.map(district => (
-                                    <Box
-                                        key={district.LEAID}
-                                        p={4}
-                                        borderWidth={1}
-                                        borderRadius="md"
-                                        cursor="pointer"
-                                        _hover={{ bg: "gray.100" }}
-                                        onClick={() => {
-                                            setSelectedDistrict(district);
-                                            setSchoolSearch([]);
-                                            setSchoolQuery("");
-                                            setSelectedSchool(null); // Reset school selection
-                                        }}
-                                        width="100%"
-                                    >
-                                        {district.NAME}
-                                    </Box>
-                                ))}
-                            </VStack>
-
-                            {/* Pagination Controls */}
-                            <Flex justify="space-between" width="100%" mt={4}>
-                                <Button
-                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                    isDisabled={currentPage === 1}
-                                >
-                                    Previous
-                                </Button>
-                                <Text>Page {currentPage} of {totalPages}</Text>
-                                <Button
-                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                    isDisabled={currentPage === totalPages}
-                                >
-                                    Next
-                                </Button>
-                            </Flex>
-
-                            {selectedDistrict && schoolSearch.length > 0 && (
-                                <>
-                                    <Heading size="md" mt={6}>Schools in {selectedDistrict.NAME}</Heading>
-                                    <VStack spacing={2} align="start" width="100%">
-                                        {schoolSearch.map(school => (
-                                            <Box
-                                                key={school.NCESSCH}
-                                                p={4}
-                                                borderWidth={1}
-                                                borderRadius="md"
-                                                cursor="pointer"
-                                                _hover={{ bg: "gray.100" }}
-                                                onClick={() => setSelectedSchool(school)}
-                                                width="100%"
-                                            >
-                                                {school.NAME}
-                                            </Box>
-                                        ))}
-                                    </VStack>
-                                </>
-                            )}
-
-                            {/* Display selected school details */}
-                            {selectedSchool && (
-                                <Box mt={6} p={4} borderWidth={1} borderRadius="md" width="100%">
-                                    <Heading size="md">School Details</Heading>
-                                    <Text><strong>Name:</strong> {selectedSchool.NAME}</Text>
-                                    <Text><strong>Address:</strong> {selectedSchool.STREET}, {selectedSchool.CITY}, {selectedSchool.STATE} {selectedSchool.ZIP}</Text>
-                                    <Text><strong>County:</strong> {selectedSchool.NMCNTY}</Text>
-                                    <Text><strong>Locale:</strong> {selectedSchool.LOCALE}</Text>
-                                    <Text><strong>Latitude:</strong> {selectedSchool.LAT}</Text>
-                                    <Text><strong>Longitude:</strong> {selectedSchool.LON}</Text>
+                                <Box p={2}>
+                                    <Heading size="sm">{selectedMarker?.NAME}</Heading>
+                                    <Text>Street: {selectedMarker?.STREET}</Text>
+                                    <Text>City: {selectedMarker?.CITY}</Text>
+                                    <Text>State: {selectedMarker?.STATE}</Text>
+                                    <Text>ZIP: {selectedMarker?.ZIP}</Text>
+                                    {/* Replace YEAR with the actual field if it's different */}
                                 </Box>
-                            )}
-                        </VStack>
-                    )}
-                </Card>
-            </ScaleFade>
+                            </InfoWindow>
+                        )}
+                    </GoogleMap>
+                </Box>
+            )}
         </Flex>
-        </VStack>
     );
 };
 

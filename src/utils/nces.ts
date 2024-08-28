@@ -66,7 +66,7 @@ const searchSchoolDistricts = async (name:string):Promise<NCESDistrictFeatureAtt
     combinedData = [
         ...publicResponse.features ? publicResponse.features.map((feature:NCESDistrictFeature) => {return feature.attributes }) : [],
     ]
-    return combinedData;
+    return combinedData; 
 }
 
 const searchSchools = async (name:string, district?:string):Promise<NCESSchoolFeatureAttributes[]> => {
