@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     Box,
     Flex,
@@ -14,14 +14,26 @@ import {
     useToast,
 } from "@chakra-ui/react";
 import { Card } from "@components/design/Card";
+import { GoogleMap, Marker, InfoWindow } from "@react-google-maps/api";
 import {
     searchSchoolDistricts,
     searchSchools,
     NCESDistrictFeatureAttributes,
     NCESSchoolFeatureAttributes,
 } from "@utils/nces";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { useJsApiLoader } from "@react-google-maps/api";
 import schoolIcon from "../school.svg";
+import { googleMapsKey } from "@utils/maps";
+
+const mapContainerStyle = {
+    width: "100%",
+    height: "400px",
+};
+
+const defaultCenter = {
+    lat: 39.8283,
+    lng: -98.5795,
+};
 
 const Home: React.FC = () => {
     const [searching, setSearching] = useState(false);
@@ -32,11 +44,9 @@ const Home: React.FC = () => {
     const [schoolQuery, setSchoolQuery] = useState("");
     const [selectedDistrict, setSelectedDistrict] = useState<NCESDistrictFeatureAttributes | null>(null);
     const [selectedSchool, setSelectedSchool] = useState<NCESSchoolFeatureAttributes | null>(null);
-    const [mapCenter, setMapCenter] = useState<google.maps.LatLngLiteral | null>(null); // Center of the map
-    const [zoomLevel, setZoomLevel] = useState<number>(10); // Zoom level of the map
+    const [selectedMarker, setSelectedMarker] = useState<NCESSchoolFeatureAttributes | null>(null);
+    const [map, setMap] = useState<google.maps.Map | null>(null);
     const toast = useToast();
-
-    const googleMapsKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 
     const { isLoaded } = useJsApiLoader({
         googleMapsApiKey: googleMapsKey || '',
@@ -63,12 +73,6 @@ const Home: React.FC = () => {
     useEffect(() => {
         if (selectedDistrict) {
             handleSchoolSearch();
-            // Set map center and zoom out when district is selected
-            setMapCenter({
-                lat: selectedDistrict?.LAT1516 || 0,
-                lng: selectedDistrict?.LON1516 || 0
-            });
-            setZoomLevel(12);
         }
     }, [selectedDistrict]);
 
@@ -78,6 +82,32 @@ const Home: React.FC = () => {
         try {
             const results = await searchSchools(schoolQuery, selectedDistrict.LEAID);
             setSchoolSearch(results);
+            if (results.length === 0) {
+                toast({
+                    title: "No Schools Found",
+                    description: `No schools found in the district for the search term "${schoolQuery}".`,
+                    status: "error",
+                    duration: 5000,
+                    isClosable: true,
+                });
+            } else {
+                toast({
+                    title: "Schools Found",
+                    description: `${results.length} schools found in the district.`,
+                    status: "success",
+                    duration: 5000,
+                    isClosable: true,
+                });
+                if (map) {
+                    const bounds = new google.maps.LatLngBounds();
+                    results.forEach(school => {
+                        if (school.LAT && school.LON) {
+                            bounds.extend({ lat: school.LAT, lng: school.LON });
+                        }
+                    });
+                    map.fitBounds(bounds);
+                }
+            }
         } catch (error) {
             toast({
                 title: "Error",
@@ -90,15 +120,17 @@ const Home: React.FC = () => {
         setSearching(false);
     };
 
-    useEffect(() => {
-        if (selectedSchool) {
-            setMapCenter({
-                lat: selectedSchool?.LAT || 0,
-                lng: selectedSchool?.LON || 0
-            });
-            setZoomLevel(15);
+    const handleMapLoad = (mapInstance: google.maps.Map) => {
+        setMap(mapInstance);
+    };
+
+    const handleMarkerClick = (school: NCESSchoolFeatureAttributes) => {
+        setSelectedMarker(school);
+        if (school.LAT && school.LON) {
+            map?.panTo({ lat: school.LAT, lng: school.LON });
+            map?.setZoom(18);
         }
-    }, [selectedSchool]);
+    };
 
     return (
         <Flex direction="column" p={8} height="100vh" gap={4}>
@@ -106,7 +138,6 @@ const Home: React.FC = () => {
             <Divider />
 
             <Flex direction={{ base: "column", md: "row" }} gap={4} flex="1">
-                {/* Column 1: District Search and Selection */}
                 <VStack flex="1" spacing={4}>
                     <Input
                         placeholder="Search for a district"
@@ -122,8 +153,8 @@ const Home: React.FC = () => {
                         onChange={(e) => {
                             const district = filteredDistricts.find(d => d.LEAID === e.target.value);
                             setSelectedDistrict(district || null);
-                            setSelectedSchool(null); // Reset school selection
-                            setMapCenter(null); // Reset map center
+                            setSelectedSchool(null);
+                            setSelectedMarker(null);
                         }}
                     >
                         {filteredDistricts.map(district => (
@@ -134,7 +165,6 @@ const Home: React.FC = () => {
                     </Select>
                 </VStack>
 
-                {/* Column 2: School Search and Selection */}
                 <VStack flex="1" spacing={4} visibility={selectedDistrict ? "visible" : "hidden"}>
                     <Input
                         placeholder="Search for a school"
@@ -151,6 +181,7 @@ const Home: React.FC = () => {
                         onChange={(e) => {
                             const school = schoolSearch.find(s => s?.NCESSCH === e.target.value);
                             setSelectedSchool(school || null);
+                            handleMarkerClick(school!);
                         }}
                         disabled={!selectedDistrict}
                     >
@@ -162,7 +193,6 @@ const Home: React.FC = () => {
                     </Select>
                 </VStack>
 
-                {/* Column 3: School Details */}
                 <Box flex="1" borderWidth={1} borderRadius="md" p={4} visibility={selectedSchool ? "visible" : "hidden"}>
                     {selectedSchool ? (
                         <>
@@ -171,7 +201,7 @@ const Home: React.FC = () => {
                             <Text>State: {selectedSchool?.STATE}</Text>
                             <Text>ZIP: {selectedSchool?.ZIP}</Text>
                             <Text>Street: {selectedSchool?.STREET}</Text>
-                            <Text>County: {selectedSchool?.CNTY}</Text>
+                            <Text>County: {selectedSchool?.NMCNTY}</Text>
                         </>
                     ) : (
                         <Text>Select a school to view details</Text>
@@ -179,30 +209,45 @@ const Home: React.FC = () => {
                 </Box>
             </Flex>
 
-            {/* Google Map */}
-            <Box flex="1" borderWidth={1} borderRadius="md" overflow="hidden">
-                {isLoaded && (
+            <Box mt={4} flex="1">
+                {isLoaded ? (
                     <GoogleMap
-                        center={mapCenter || { lat: 0, lng: 0 }}
-                        zoom={zoomLevel}
-                        mapContainerStyle={{ height: "100%", width: "100%" }}
+                        mapContainerStyle={mapContainerStyle}
+                        center={defaultCenter}
+                        zoom={5}
+                        onLoad={handleMapLoad}
                     >
-                        {selectedDistrict && schoolSearch.map(school => (
-                            <Marker
-                                key={school?.NCESSCH}
-                                position={{ lat: school?.LAT || 0, lng: school?.LON || 0 }}
-                                icon={schoolIcon}
-                                onClick={() => {
-                                    setSelectedSchool(school);
-                                    setMapCenter({
-                                        lat: school?.LAT || 0,
-                                        lng: school?.LON || 0
-                                    });
-                                    setZoomLevel(15);
-                                }}
-                            />
-                        ))}
+                        {schoolSearch.map((school) =>
+                            school.LAT && school.LON ? (
+                                <Marker
+                                    key={school.NCESSCH}
+                                    position={{ lat: school.LAT, lng: school.LON }}
+                                    icon={{
+                                        url: schoolIcon,
+                                        //scaledSize: new google.maps.Size(40, 40),
+                                    }}
+                                    onClick={() => handleMarkerClick(school)}
+                                />
+                            ) : null
+                        )}
+                        {selectedMarker && selectedMarker.LAT && selectedMarker.LON && (
+                            <InfoWindow
+                                position={{ lat: selectedMarker.LAT, lng: selectedMarker.LON }}
+                                onCloseClick={() => setSelectedMarker(null)}
+                            >
+                                <Box>
+                                    <Heading size="sm">{selectedMarker.NAME}</Heading>
+                                    <Text>City: {selectedMarker.CITY}</Text>
+                                    <Text>State: {selectedMarker.STATE}</Text>
+                                    <Text>ZIP: {selectedMarker.ZIP}</Text>
+                                    <Text>Street: {selectedMarker.STREET}</Text>
+                                    <Text>County: {selectedMarker.NMCNTY}</Text>
+                                </Box>
+                            </InfoWindow>
+                        )}
                     </GoogleMap>
+                ) : (
+                    <Spinner />
                 )}
             </Box>
         </Flex>
