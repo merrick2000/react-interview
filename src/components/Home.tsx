@@ -49,7 +49,7 @@ const Home: React.FC = () => {
     const toast = useToast();
 
     const { isLoaded } = useJsApiLoader({
-        googleMapsApiKey: googleMapsKey || '',
+        googleMapsApiKey: googleMapsKey as string,
     });
 
     const handleDistrictSearch = async () => {
