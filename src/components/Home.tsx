@@ -22,7 +22,7 @@ import {
     NCESSchoolFeatureAttributes,
 } from "@utils/nces";
 import { useJsApiLoader } from "@react-google-maps/api";
-import schoolIcon from "../school.svg";
+import schoolIcon from "../assets/school.svg";
 import { googleMapsKey } from "@utils/maps";
 
 const mapContainerStyle = {
