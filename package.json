@@ -1,13 +1,10 @@
 {
   "name": "characterstrong-developer-interview-react-app",
   "version": "0.0.0",
-  "homepage": "https://merrick2000.github.io/react-intervie",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "serve": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "serve": "vite preview"
   },
   "dependencies": {
     "@chakra-ui/react": "^1.6.10",
