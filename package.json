@@ -1,7 +1,7 @@
 {
   "name": "characterstrong-developer-interview-react-app",
   "version": "0.0.0",
-  "homepage": "https://merrick2000.github.io/react-interview/",
+  "homepage": "https://merrick2000.github.io/react-intervie",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
